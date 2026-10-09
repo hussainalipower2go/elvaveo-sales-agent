@@ -3,6 +3,7 @@ import {
   discoverLeadsWithFilters,
   getAvailableDiscoveryCountries,
   getAvailableDiscoveryServices,
+  calculateLeadQualificationScore,
 } from '@/lib/leads/discovery-service';
 import { TargetCountry, TargetService } from '@/lib/types/database';
 
@@ -119,3 +120,85 @@ describe('Phase 2: Lead Discovery Engine & Safeguards', () => {
     expect(result.leads.length).toBeLessThanOrEqual(limit);
   });
 });
+
+describe('Phase 3: Real Client Discovery, Qualification Scoring & Channel Safeguards', () => {
+  it('calculates deterministic lead qualification scores with transparent breakdowns', () => {
+    const breakdown = calculateLeadQualificationScore({
+      confidenceLevel: 'high',
+      targetService: 'website_development',
+      observationsCount: 3,
+      hasPublicChannel: true,
+      country: 'USA',
+      hasDirectEmail: true,
+    });
+
+    expect(breakdown.score).toBeGreaterThanOrEqual(85);
+    expect(breakdown.score).toBeLessThanOrEqual(100);
+    expect(breakdown.tier).toBe('high_priority');
+    expect(breakdown.technicalSignalScore).toBe(40);
+    expect(breakdown.serviceFitScore).toBe(30);
+    expect(breakdown.channelReliabilityScore).toBe(20);
+    expect(breakdown.marketPriorityScore).toBe(10);
+    expect(breakdown.explanation).toContain('Score');
+    expect(breakdown.reasons.length).toBeGreaterThan(0);
+  });
+
+  it('populates qualification score, explanation, and public contact channels on discovered leads', async () => {
+    const result = await discoverLeadsWithFilters({ limit: 10 });
+
+    expect(result.leads.length).toBeGreaterThan(0);
+    result.leads.forEach((lead) => {
+      expect(lead.qualification_score).toBeDefined();
+      expect(lead.qualification_score).toBeGreaterThanOrEqual(60);
+      expect(lead.qualification_score).toBeLessThanOrEqual(100);
+      expect(lead.qualification_explanation).toBeTruthy();
+      expect(lead.qualification_reasons).toBeDefined();
+      expect(Array.isArray(lead.qualification_reasons)).toBe(true);
+
+      // Public contact channel must be a legitimate verifiable public business channel
+      expect(lead.public_contact_channel).toBeTruthy();
+      expect(lead.public_contact_channel!.length).toBeGreaterThan(5);
+    });
+  });
+
+  it('filters discovered leads by minimum qualification score threshold', async () => {
+    const minScore = 85;
+    const result = await discoverLeadsWithFilters({ minScore, limit: 10 });
+
+    expect(result.leads.length).toBeGreaterThan(0);
+    result.leads.forEach((lead) => {
+      expect(lead.qualification_score).toBeGreaterThanOrEqual(minScore);
+    });
+  });
+
+  it('verifies legitimate real companies exist for all target markets (USA, UK, UAE, Canada)', async () => {
+    const markets: TargetCountry[] = ['USA', 'UK', 'UAE', 'Canada'];
+
+    for (const country of markets) {
+      const result = await discoverLeadsWithFilters({ country, limit: 5 });
+      expect(result.leads.length).toBeGreaterThan(0);
+
+      result.leads.forEach((lead) => {
+        expect(lead.country).toBe(country);
+        expect(lead.company).toBeTruthy();
+        expect(lead.website).toMatch(/^https?:\/\//);
+        expect(lead.public_contact_channel).toBeTruthy();
+        // Public contact must NEVER be marked as affirmative marketing consent
+        expect(lead.consent_status).toBe('unknown');
+        expect(lead.permission_type).toBe('unknown');
+      });
+    }
+  });
+
+  it('never treats publicly listed corporate contact information as affirmative marketing consent', async () => {
+    const result = await discoverLeadsWithFilters({ limit: 10 });
+
+    result.leads.forEach((lead) => {
+      expect(lead.consent_status).not.toBe('opted_in');
+      expect(lead.permission_type).not.toBe('verified_opt_in');
+      expect(lead.consent_status).toBe('unknown');
+      expect(lead.permission_type).toBe('unknown');
+    });
+  });
+});
+

@@ -98,6 +98,10 @@ export interface Lead {
   confidence_level?: ConfidenceLevel | null;
   permission_type?: PermissionType;
   lifecycle_stage?: LifecycleStage;
+  qualification_score?: number | null;
+  qualification_explanation?: string | null;
+  qualification_reasons?: string[] | null;
+  public_contact_channel?: string | null;
   created_at: string;
   updated_at: string;
 }

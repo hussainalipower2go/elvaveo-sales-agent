@@ -177,6 +177,10 @@ export async function fetchBackendData(): Promise<BackendDataPayload> {
         confidence_level: l.confidence_level || (meta.confidence_level as Lead['confidence_level']) || null,
         permission_type: l.permission_type || (meta.permission_type as Lead['permission_type']) || (l.consent_status === 'opted_in' ? 'verified_opt_in' : 'unknown'),
         lifecycle_stage: l.lifecycle_stage || (meta.lifecycle_stage as Lead['lifecycle_stage']) || (l.status === 'contacted' ? 'sent' : l.status === 'replied' ? 'replied' : l.consent_status === 'opted_in' ? 'qualified' : 'discovered'),
+        qualification_score: l.qualification_score ?? (meta.qualification_score as number) ?? null,
+        qualification_explanation: l.qualification_explanation || (meta.qualification_explanation as string) || null,
+        qualification_reasons: l.qualification_reasons || (meta.qualification_reasons as string[]) || null,
+        public_contact_channel: l.public_contact_channel || (meta.public_contact_channel as string) || null,
       };
     });
 

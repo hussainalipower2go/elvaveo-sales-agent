@@ -84,6 +84,7 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
   const [discoveryCountry, setDiscoveryCountry] = useState<TargetCountry | 'all'>('all');
   const [discoveryService, setDiscoveryService] = useState<TargetService | 'all'>('all');
   const [discoveryConfidence, setDiscoveryConfidence] = useState<ConfidenceLevel | 'all'>('all');
+  const [discoveryMinScore, setDiscoveryMinScore] = useState<string>('all');
   const [isDiscovering, setIsDiscovering] = useState(false);
 
   // CSV Import State
@@ -274,6 +275,7 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
           country: discoveryCountry === 'all' ? undefined : discoveryCountry,
           service: discoveryService === 'all' ? undefined : discoveryService,
           confidence: discoveryConfidence === 'all' ? undefined : discoveryConfidence,
+          minScore: discoveryMinScore === 'all' ? undefined : Number(discoveryMinScore),
           limit: 10,
         },
       });
@@ -696,7 +698,12 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
     const matchesCountry = discoveryCountry === 'all' || l.country === discoveryCountry;
     const matchesService = discoveryService === 'all' || l.target_service === discoveryService;
     const matchesConfidence = discoveryConfidence === 'all' || l.confidence_level === discoveryConfidence;
-    return matchesCountry && matchesService && matchesConfidence;
+    const matchesScore =
+      discoveryMinScore === 'all' ||
+      (l.qualification_score !== undefined &&
+        l.qualification_score !== null &&
+        l.qualification_score >= Number(discoveryMinScore));
+    return matchesCountry && matchesService && matchesConfidence && matchesScore;
   });
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
@@ -1261,6 +1268,19 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
                 </select>
               </div>
 
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Min Qualification Score:</label>
+                <select
+                  className="select-input"
+                  value={discoveryMinScore}
+                  onChange={(e) => setDiscoveryMinScore(e.target.value)}
+                >
+                  <option value="all">All Qualification Scores</option>
+                  <option value="85">⭐ High Priority ICP (85+)</option>
+                  <option value="70">🎯 Moderate Fit+ (70+)</option>
+                </select>
+              </div>
+
               <button
                 className="btn btn-primary"
                 style={{ height: 42, padding: '0 20px' }}
@@ -1278,9 +1298,9 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
                   <tr>
                     <th>Company & Contact</th>
                     <th>Market & Service</th>
+                    <th>Qualification Score</th>
                     <th>Verified Technical Observations</th>
-                    <th>Confidence</th>
-                    <th>Permission Status</th>
+                    <th>Public Channel & Permission</th>
                     <th>Lifecycle</th>
                     <th>Actions</th>
                   </tr>
@@ -1348,7 +1368,33 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
                           </div>
                         </td>
 
-                        <td style={{ maxWidth: 360 }}>
+                        <td>
+                          <div style={{ marginBottom: 4 }}>
+                            {lead.qualification_score !== null && lead.qualification_score !== undefined ? (
+                              <span
+                                className={`badge ${
+                                  lead.qualification_score >= 85
+                                    ? 'badge-emerald'
+                                    : lead.qualification_score >= 70
+                                    ? 'badge-amber'
+                                    : 'badge-neutral'
+                                }`}
+                                style={{ fontSize: 11, fontWeight: 700 }}
+                              >
+                                {lead.qualification_score}/100 {lead.qualification_score >= 85 ? 'High ICP' : 'Moderate'}
+                              </span>
+                            ) : (
+                              <span className="badge badge-neutral" style={{ fontSize: 11 }}>Standard</span>
+                            )}
+                          </div>
+                          {lead.qualification_explanation && (
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 220, lineHeight: 1.3 }}>
+                              {lead.qualification_explanation}
+                            </div>
+                          )}
+                        </td>
+
+                        <td style={{ maxWidth: 340 }}>
                           {lead.business_observations && lead.business_observations.length > 0 ? (
                             <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
                               {lead.business_observations.map((obs, idx) => (
@@ -1367,26 +1413,22 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
                           )}
                         </td>
 
-                        <td>
-                          {lead.confidence_level === 'high' ? (
-                            <span className="badge badge-emerald">High</span>
-                          ) : lead.confidence_level === 'medium' ? (
-                            <span className="badge badge-amber">Medium</span>
-                          ) : (
-                            <span className="badge badge-neutral">Low</span>
-                          )}
-                        </td>
-
-                        <td>
-                          {lead.consent_status === 'opted_in' ? (
-                            <span className="badge badge-emerald">✓ Verified Opt-In</span>
-                          ) : lead.consent_status === 'opted_out' ? (
-                            <span className="badge badge-crimson">✕ Opted-Out</span>
-                          ) : (
-                            <span className="badge badge-amber" title="Requires verified consent before live dispatch">
-                              ⚠️ Unknown Permission
-                            </span>
-                          )}
+                        <td style={{ maxWidth: 220 }}>
+                          <div style={{ fontSize: 11, color: '#93c5fd', marginBottom: 4 }}>
+                            <strong>Public Channel:</strong>{' '}
+                            {lead.public_contact_channel || 'Public Corporate Domain'}
+                          </div>
+                          <div>
+                            {lead.consent_status === 'opted_in' ? (
+                              <span className="badge badge-emerald">✓ Verified Opt-In</span>
+                            ) : lead.consent_status === 'opted_out' ? (
+                              <span className="badge badge-crimson">✕ Opted-Out</span>
+                            ) : (
+                              <span className="badge badge-amber" title="Requires verified consent before live dispatch">
+                                ⚠️ Unknown Permission (Cold)
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         <td>
@@ -1975,10 +2017,43 @@ export default function DashboardClient({ initialData }: { initialData: BackendD
                           <h4 style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Eligibility Inspection</h4>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Lead Qualification:</span>
+                              {lead?.qualification_score !== undefined && lead?.qualification_score !== null ? (
+                                <span
+                                  className={`badge ${
+                                    lead.qualification_score >= 85
+                                      ? 'badge-emerald'
+                                      : lead.qualification_score >= 70
+                                      ? 'badge-amber'
+                                      : 'badge-neutral'
+                                  }`}
+                                  style={{ fontSize: 11, fontWeight: 700 }}
+                                >
+                                  {lead.qualification_score}/100 {lead.qualification_score >= 85 ? 'High ICP' : 'Moderate'}
+                                </span>
+                              ) : (
+                                <span className="badge badge-neutral" style={{ fontSize: 11 }}>Standard</span>
+                              )}
+                            </div>
+
+                            {lead?.qualification_explanation && (
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: 8, borderRadius: 6, lineHeight: 1.3 }}>
+                                💡 {lead.qualification_explanation}
+                              </div>
+                            )}
+
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                               <span>Lead Consent:</span>
                               <span style={{ fontWeight: 600, color: lead?.consent_status === 'opted_in' ? '#10b981' : '#f59e0b' }}>
-                                {lead?.consent_status || 'unknown'}
+                                {lead?.consent_status || 'unknown'} {lead?.consent_status !== 'opted_in' && '(Test Dispatch Only)'}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Public Contact Channel:</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 170, textAlign: 'right' }}>
+                                {lead?.public_contact_channel || 'Direct Corporate Portal'}
                               </span>
                             </div>
 
